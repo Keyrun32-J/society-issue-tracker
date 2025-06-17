@@ -1,32 +1,36 @@
-# db.py
-from config import ticket_collection
-from datetime import datetime
-from bson.objectid import ObjectId
+# FILE: db.py
+from config import ticket_collection, user_collection
 
-def create_ticket(flat, issue_type, desc, raised_by):
+def create_ticket(title, description):
     ticket = {
-        "flat_number": flat,
-        "issue_type": issue_type,
-        "description": desc,
-        "raised_by": raised_by,
+        "title": title,
+        "description": description,
         "status": "Open",
-        "assigned_to": "",
-        "created_at": datetime.now(),
-        "updated_at": datetime.now()
+        "assigned_to": None,
+        "mobile": None
     }
     ticket_collection.insert_one(ticket)
 
 def get_all_tickets():
     return list(ticket_collection.find())
 
-def assign_ticket(ticket_id, assignee):
-    ticket_collection.update_one(
-        {"_id": ObjectId(ticket_id)},
-        {"$set": {"assigned_to": assignee, "status": "In Progress", "updated_at": datetime.now()}}
-    )
+def assign_ticket(ticket_id, technician_username):
+    technician = user_collection.find_one({"username": technician_username})
+    if technician:
+        ticket_collection.update_one(
+            {"_id": ticket_id},
+            {"$set": {
+                "assigned_to": technician["username"],
+                "mobile": technician["mobile"],
+                "status": "Assigned"
+            }}
+        )
 
 def close_ticket(ticket_id):
     ticket_collection.update_one(
-        {"_id": ObjectId(ticket_id)},
-        {"$set": {"status": "Closed", "updated_at": datetime.now()}}
+        {"_id": ticket_id},
+        {"$set": {"status": "Closed"}}
     )
+
+def get_all_technicians():
+    return list(user_collection.find())
