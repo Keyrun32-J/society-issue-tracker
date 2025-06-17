@@ -1,15 +1,16 @@
 # FILE: db.py
 from config import ticket_collection, user_collection
 
-def create_ticket(title, description):
+def create_ticket(title, description, mobile):
     ticket = {
         "title": title,
         "description": description,
         "status": "Open",
         "assigned_to": None,
-        "mobile": None
+        "mobile": mobile  # ← Add this line
     }
     ticket_collection.insert_one(ticket)
+
 
 def get_all_tickets():
     return list(ticket_collection.find())

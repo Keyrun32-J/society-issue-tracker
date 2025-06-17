@@ -1,50 +1,96 @@
-# FILE: app.py
 import streamlit as st
-from db import create_ticket, get_all_tickets, assign_ticket, close_ticket, get_all_technicians
-from bson import ObjectId
+from config import ticket_collection, technicians
+from pymongo import ASCENDING
 
-st.set_page_config(page_title="Society Issue Tracker", layout="wide")
+# ---------- Helper Functions ----------
 
-st.title("🏡 Society Issue Tracker")
+def create_ticket(title, description, mobile):
+    ticket = {
+        "title": title,
+        "description": description,
+        "mobile": mobile,
+        "status": "Open",
+        "assigned_to": None
+    }
+    ticket_collection.insert_one(ticket)
 
-menu = st.sidebar.selectbox("Select View", ["Raise Ticket", "Manager Dashboard"])
+def get_all_tickets():
+    return list(ticket_collection.find().sort("_id", ASCENDING))
 
-if menu == "Raise Ticket":
-    st.subheader("Raise a New Ticket")
-    title = st.text_input("Title")
-    description = st.text_area("Description")
+def assign_ticket(ticket_id, technician_key):
+    technician = technicians[technician_key]
+    ticket_collection.update_one(
+        {"_id": ticket_id},
+        {"$set": {"assigned_to": technician_key}}
+    )
 
-    if st.button("Submit"):
-        if title and description:
-            create_ticket(title, description)
-            st.success("Ticket submitted successfully!")
-        else:
-            st.warning("Please fill all fields.")
+def close_ticket(ticket_id):
+    ticket_collection.update_one(
+        {"_id": ticket_id},
+        {"$set": {"status": "Closed"}}
+    )
 
-elif menu == "Manager Dashboard":
-    st.subheader("📋 Manager Dashboard")
+# ---------- Streamlit App ----------
 
+st.title("🏢 Society Issue Tracker")
+
+menu = st.sidebar.radio("Navigation", ["Resident", "Manager"])
+
+# ---------- Resident View ----------
+if menu == "Resident":
+    st.header("Report an Issue")
+
+    with st.form("ticket_form"):
+        title = st.text_input("Issue Title")
+        description = st.text_area("Issue Description")
+        mobile = st.text_input("Your Mobile Number")
+
+        submitted = st.form_submit_button("Submit")
+        if submitted:
+            if title and description and mobile:
+                create_ticket(title, description, mobile)
+                st.success("✅ Ticket created successfully!")
+            else:
+                st.warning("Please fill all the fields.")
+
+# ---------- Manager View ----------
+elif menu == "Manager":
+    st.header("📋 Manager Dashboard")
     tickets = get_all_tickets()
-    technicians = get_all_technicians()
-    technician_map = {tech['username']: tech['mobile'] for tech in technicians}
 
-    for ticket in tickets:
-        st.markdown(f"**Title**: {ticket['title']}")
-        st.markdown(f"**Description**: {ticket['description']}")
-        st.markdown(f"**Status**: {ticket['status']}")
-        st.markdown(f"**Assigned To**: {ticket.get('assigned_to', 'Unassigned')}")
-        st.markdown(f"**Mobile**: {ticket.get('mobile', '-')}")
-        
-        if ticket['status'] == "Open":
-            tech_options = list(technician_map.keys())
-            selected_tech = st.selectbox(f"Assign to Technician (Ticket ID: {ticket['_id']})", tech_options, key=str(ticket['_id']))
-            if st.button("Assign", key=f"assign_{ticket['_id']}"):
-                assign_ticket(ticket['_id'], selected_tech)
-                st.success(f"Ticket assigned to {selected_tech}")
-        
-        if ticket['status'] != "Closed":
-            if st.button("Close Ticket", key=f"close_{ticket['_id']}"):
-                close_ticket(ticket['_id'])
-                st.success("Ticket closed.")
-        
-        st.markdown("---")
+    if not tickets:
+        st.info("No tickets submitted yet.")
+    else:
+        for ticket in tickets:
+            with st.expander(f"📝 {ticket['title']} - [{ticket['status']}]"):
+                st.markdown(f"**Description**: {ticket['description']}")
+                st.markdown(f"**Mobile**: {ticket.get('mobile', 'N/A')}")
+                assigned_key = ticket.get("assigned_to")
+                if assigned_key:
+                    assigned_info = technicians.get(assigned_key, {})
+                    st.markdown(f"**Assigned To**: {assigned_info.get('name')} ({assigned_info.get('mobile')})")
+                else:
+                    st.markdown("**Assigned To**: Not yet assigned")
+
+                # Assignment options
+                if ticket["status"] != "Closed":
+                    cols = st.columns(2)
+
+                    with cols[0]:
+                        selected_tech = st.selectbox(
+                            "Assign Technician",
+                            options=list(technicians.keys()),
+                            format_func=lambda k: f"{technicians[k]['name']} ({technicians[k]['mobile']})",
+                            key=f"tech_{str(ticket['_id'])}"
+                        )
+
+                        if st.button("Assign", key=f"assign_{str(ticket['_id'])}"):
+                            assign_ticket(ticket["_id"], selected_tech)
+                            st.success("✅ Ticket assigned.")
+                            st.experimental_rerun()
+
+                    with cols[1]:
+                        if st.button("Close Ticket", key=f"close_{str(ticket['_id'])}"):
+                            close_ticket(ticket["_id"])
+                            st.success("✅ Ticket closed.")
+                            st.experimental_rerun()
