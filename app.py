@@ -1,123 +1,102 @@
 import streamlit as st
-from db import (
-    create_ticket,
-    get_all_tickets,
-    get_tickets_by_user,
-    assign_ticket_to_technician,
-    add_technician,
-    get_technicians,
-    get_tickets_by_technician,
-)
-import datetime
+from db import *
+from datetime import datetime
 
 st.set_page_config(page_title="Society Issue Tracker", layout="wide")
-st.title("🏠 Society Issue Tracker")
 
-role = st.sidebar.selectbox("Login as", ["Resident", "Manager", "Technician"])
+st.title("🏢 Society Issue Tracker")
 
-# ------------------ RESIDENT ------------------ #
-if role == "Resident":
-    st.header("Raise an Issue")
-    name = st.text_input("Your Name")
+view = st.sidebar.radio("Login As", ["Resident", "Manager", "Technician"])
+
+# --- RESIDENT VIEW ---
+if view == "Resident":
+    st.subheader("Raise an Issue")
     flat = st.text_input("Flat Number")
-    mobile = st.text_input("Mobile Number")
-    issue_type = st.selectbox("Issue Type", ["Electrician", "Plumbing", "Carpentry", "Others"])
-    description = st.text_area("Issue Description")
+    issue_type = st.selectbox("Issue Type", ["Electric", "Plumbing", "Carpentry", "Other"])
+    description = st.text_area("Describe the issue")
 
-    if st.button("Submit"):
-        ticket = {
-            "name": name,
+    if st.button("Submit Ticket"):
+        create_ticket({
             "flat": flat,
-            "mobile": mobile,
             "issue_type": issue_type,
             "description": description,
-            "status": "Open",
-            "priority": None,
-            "assigned_to": None,
-            "created_at": datetime.datetime.now()
-        }
-        create_ticket(ticket)
-        st.success("✅ Ticket submitted!")
+            "created_at": datetime.now(),
+            "status": "Pending"
+        })
+        st.success("Ticket submitted!")
 
-    st.markdown("---")
-    st.subheader("Your Submitted Tickets")
+    st.subheader("Your Tickets")
     if flat:
         tickets = get_tickets_by_user(flat)
         for t in tickets:
-            st.write(f"🔹 **Issue**: {t.get('issue_type', 'N/A')} | **Status**: {t.get('status', 'N/A')}")
-            st.write(f"Description: {t.get('description', '')}")
-            if t.get("assigned_to"):
-                st.write(f"👨‍🔧 Assigned to: {t['assigned_to']}")
+            st.markdown(f"- **{t['issue_type']}** | {t['description']} | **Status:** {t.get('status', 'Pending')} | **Assigned To:** {t.get('assigned_to', 'N/A')} | Priority: {t.get('priority', '-')}")
 
-# ------------------ MANAGER ------------------ #
-elif role == "Manager":
-    st.header("Manager Dashboard")
-    st.subheader("Overview by Category")
-    tickets = get_all_tickets()
-    category_status = {}
+# --- MANAGER VIEW ---
+elif view == "Manager":
+    st.subheader("Manager Dashboard")
 
-    for t in tickets:
-        cat = t.get("issue_type", "Others")
-        status = t.get("status", "Open")
-        if cat not in category_status:
-            category_status[cat] = {"Open": 0, "In Progress": 0, "Closed": 0}
-        category_status[cat][status] = category_status[cat].get(status, 0) + 1
+    # Overview by Issue Type
+    st.markdown("### 📊 Overview")
+    all_tickets = get_all_tickets()
+    issue_buckets = {}
+    for t in all_tickets:
+        typ = t.get("issue_type", "Unknown")
+        issue_buckets.setdefault(typ, []).append(t)
 
-    for cat, status_count in category_status.items():
-        st.write(f"🔧 **{cat}** — Open: {status_count['Open']}, In Progress: {status_count['In Progress']}, Closed: {status_count['Closed']}")
+    for category, items in issue_buckets.items():
+        open_count = sum(1 for i in items if i.get("status") != "Resolved")
+        closed_count = sum(1 for i in items if i.get("status") == "Resolved")
+        st.markdown(f"**{category}** - Open: {open_count} | Closed: {closed_count}")
 
-    st.markdown("---")
-    st.subheader("Assign Ticket")
-    open_tickets = [t for t in tickets if t.get("status") == "Open"]
+    # Assign Tickets
+    st.markdown("### 🛠️ Assign Tickets")
+    open_tickets = [t for t in all_tickets if t.get("status") != "Resolved"]
+
     if open_tickets:
-        selected_ticket = st.selectbox("Select a ticket", open_tickets, format_func=lambda x: f"{x.get('_id', '')} - {x.get('issue_type', '')}")
+        selected_ticket = st.selectbox("Select a ticket", open_tickets, format_func=lambda x: f"{x.get('_id')} - {x.get('issue_type', 'Unknown')}")
         technicians = get_technicians()
-        selected_tech = st.selectbox("Assign to Technician", technicians, format_func=lambda x: f"{x['name']} ({x['mobile']})")
-        priority = st.selectbox("Set Priority", ["P1", "P2", "P3"])  # SLA related
+        tech_names = [t["name"] for t in technicians]
+
+        selected_tech = st.selectbox("Assign to Technician", tech_names)
+        selected_priority = st.radio("Priority", ["P1", "P2", "P3"])
 
         if st.button("Assign"):
-            assign_ticket_to_technician(selected_ticket["_id"], selected_tech["name"], priority)
-            st.success("✅ Ticket Assigned")
+            assign_ticket_to_technician(selected_ticket['_id'], selected_tech, selected_priority)
+            st.success("Ticket assigned successfully!")
             st.experimental_rerun()
     else:
         st.info("No open tickets to assign.")
 
-    st.markdown("---")
-    st.subheader("Assigned Tickets")
-    assigned_tickets = [t for t in tickets if t.get("assigned_to")]
-    for t in assigned_tickets:
-        st.write(f"📌 **Issue**: {t.get('issue_type', '')}")
-        st.write(f"👤 Resident: {t.get('name')} | 🏠 Flat: {t.get('flat')}")
-        st.write(f"📞 Mobile: {t.get('mobile')}")
-        st.write(f"🛠️ Assigned to: {t.get('assigned_to')} | 🚦 Priority: {t.get('priority', 'Not Set')} | 📌 Status: {t.get('status', '')}")
-        st.markdown("---")
-
-    st.subheader("Add Technician")
-    new_tech_name = st.text_input("Technician Name")
-    new_tech_mobile = st.text_input("Technician Mobile Number")
+    # Add Technician
+    st.markdown("### ➕ Add Technician")
+    new_name = st.text_input("Technician Name")
+    new_mobile = st.text_input("Mobile Number")
     if st.button("Add Technician"):
-        add_technician(new_tech_name, new_tech_mobile)
-        st.success("✅ Technician Added")
+        add_technician(new_name, new_mobile)
+        st.success("Technician added")
 
-# ------------------ TECHNICIAN ------------------ #
-elif role == "Technician":
-    st.header("Technician Dashboard")
+# --- TECHNICIAN VIEW ---
+elif view == "Technician":
+    st.subheader("Technician Login")
     tech_name = st.text_input("Enter your name")
     if tech_name:
         tickets = get_tickets_by_technician(tech_name)
         if tickets:
+            st.subheader(f"Tickets assigned to {tech_name}")
             for t in tickets:
-                st.write(f"🔧 **Issue**: {t.get('issue_type', '')}")
-                st.write(f"📄 Description: {t.get('description', '')}")
-                st.write(f"🏠 Flat: {t.get('flat', '')}")
-                st.write(f"📌 Priority: {t.get('priority', '')}")
-                st.write(f"📍 Status: {t.get('status', '')}")
-                if st.button(f"Mark as In Progress - {t['_id']}"):
-                    assign_ticket_to_technician(t["_id"], tech_name, t.get("priority"), status="In Progress")
-                    st.experimental_rerun()
-                if st.button(f"Mark as Closed - {t['_id']}"):
-                    assign_ticket_to_technician(t["_id"], tech_name, t.get("priority"), status="Closed")
-                    st.experimental_rerun()
-                st.markdown("---")
+                breached = False
+                if t.get("priority") == "P1":
+                    due = t['created_at'] + timedelta(hours=6)
+                elif t.get("priority") == "P2":
+                    due = t['created_at'] + timedelta(hours=48)
+                elif t.get("priority") == "P3":
+                    due = t['created_at'] + timedelta(days=10)
+                else:
+                    due = t['created_at']
+
+                if datetime.now() > due:
+                    breached = True
+
+                st.markdown(f"- **{t['issue_type']}** | {t['description']} | Priority: {t.get('priority')} | Status: {t.get('status')} | {'🚨 SLA Breached' if breached else '✅ On Time'}")
         else:
             st.info("No tickets assigned to you.")
