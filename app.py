@@ -63,7 +63,7 @@ elif view == "Manager":
         if st.button("Assign"):
             assign_ticket_to_technician(selected_ticket['_id'], selected_tech, selected_priority)
             st.success("Ticket assigned successfully!")
-            st.experimental_rerun()
+            st.rerun()
     else:
         st.info("No open tickets to assign.")
 
