@@ -17,24 +17,24 @@ def login():
     st.title("🔐 Society Issue Tracker Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
+    login_clicked = st.button("Login")
 
-    if st.button("Login"):
+    if login_clicked:
         if username == MANAGER_CREDENTIALS["username"] and password == MANAGER_CREDENTIALS["password"]:
             st.session_state["role"] = "manager"
             st.session_state["username"] = username
-            st.experimental_rerun()
         elif username == RESIDENT_CREDENTIALS["username"] and password == RESIDENT_CREDENTIALS["password"]:
             st.session_state["role"] = "resident"
             st.session_state["username"] = username
-            st.experimental_rerun()
         else:
             technicians = get_technicians()
             for tech in technicians:
                 if tech["username"] == username and password == TECHNICIAN_PASSWORD:
                     st.session_state["role"] = "technician"
                     st.session_state["username"] = username
-                    st.experimental_rerun()
-            st.error("❌ Invalid credentials")
+                    break
+            else:
+                st.error("❌ Invalid credentials")
 
 # --- Manager Dashboard ---
 def manager_dashboard():
@@ -101,9 +101,10 @@ def technician_dashboard():
         created_at = t.get("created_at")
         if created_at:
             created_at = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
-            if t["priority"] == "P1":
+            priority = t.get("priority", "P3")
+            if priority == "P1":
                 due = created_at + timedelta(hours=6)
-            elif t["priority"] == "P2":
+            elif priority == "P2":
                 due = created_at + timedelta(hours=48)
             else:
                 due = created_at + timedelta(days=10)
@@ -116,6 +117,7 @@ def technician_dashboard():
         if t.get("status") != "Resolved":
             if st.button(f"Mark Resolved - {t.get('_id')}"):
                 update_ticket_status(t["_id"], "Resolved")
+                st.success("Ticket marked as Resolved")
                 st.experimental_rerun()
 
 # --- App Logic ---
