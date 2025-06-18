@@ -22,16 +22,18 @@ def login():
         if username == MANAGER_CREDENTIALS["username"] and password == MANAGER_CREDENTIALS["password"]:
             st.session_state["role"] = "manager"
             st.session_state["username"] = username
+            st.experimental_rerun()
         elif username == RESIDENT_CREDENTIALS["username"] and password == RESIDENT_CREDENTIALS["password"]:
             st.session_state["role"] = "resident"
             st.session_state["username"] = username
+            st.experimental_rerun()
         else:
             technicians = get_technicians()
             for tech in technicians:
                 if tech["username"] == username and password == TECHNICIAN_PASSWORD:
                     st.session_state["role"] = "technician"
                     st.session_state["username"] = username
-                    return
+                    st.experimental_rerun()
             st.error("❌ Invalid credentials")
 
 # --- Manager Dashboard ---
