@@ -1,59 +1,65 @@
+# db.py
 from config import ticket_collection, technician_collection, user_collection
-from datetime import datetime, timedelta
+from bson.objectid import ObjectId
+from datetime import datetime
 
-def create_ticket(ticket):
-    ticket['created_at'] = datetime.now()
-    ticket['status'] = 'Open'
-    ticket['assigned_to'] = None
+def create_ticket(name, flat, issue_type, description):
+    ticket = {
+        "name": name,
+        "flat": flat,
+        "issue_type": issue_type,
+        "description": description,
+        "status": "Open",
+        "created_at": datetime.utcnow(),
+        "priority": None,
+        "assigned_to": None
+    }
     ticket_collection.insert_one(ticket)
-
-def get_user_tickets(username):
-    return list(ticket_collection.find({'username': username}))
 
 def get_all_tickets():
     return list(ticket_collection.find())
 
-def get_open_tickets():
-    return list(ticket_collection.find({'status': 'Open'}))
-
-def assign_ticket(ticket_id, technician_name, priority):
-    priority_sla = {
-        'P1': 6,
-        'P2': 48,
-        'P3': 120  # ~5 business days
-    }
-    sla_hours = priority_sla.get(priority, 48)
-    due_date = datetime.now() + timedelta(hours=sla_hours)
-
-    ticket_collection.update_one(
-        {'_id': ticket_id},
-        {'$set': {
-            'assigned_to': technician_name,
-            'priority': priority,
-            'status': 'In Progress',
-            'due_date': due_date
-        }}
-    )
-
-def resolve_ticket(ticket_id):
-    ticket_collection.update_one(
-        {'_id': ticket_id},
-        {'$set': {'status': 'Resolved', 'resolved_at': datetime.now()}}
-    )
-
-def add_technician(name, phone, username, password):
-    technician_collection.insert_one({
-        'name': name,
-        'phone': phone,
-        'username': username,
-        'password': password
-    })
+def get_tickets_by_user(name, flat):
+    return list(ticket_collection.find({"name": name, "flat": flat}))
 
 def get_technicians():
     return list(technician_collection.find())
 
-def technician_login(username, password):
-    return technician_collection.find_one({'username': username, 'password': password})
+def assign_ticket(ticket_id, technician_id, priority):
+    technician = technician_collection.find_one({"_id": ObjectId(technician_id)})
+    if technician:
+        ticket_collection.update_one(
+            {"_id": ObjectId(ticket_id)},
+            {
+                "$set": {
+                    "assigned_to": {
+                        "id": str(technician["_id"]),
+                        "name": technician["name"],
+                        "mobile": technician["mobile"]
+                    },
+                    "status": "In Progress",
+                    "priority": priority,
+                    "assigned_at": datetime.utcnow()
+                }
+            }
+        )
 
-def get_tickets_by_technician(tech_name):
-    return list(ticket_collection.find({'assigned_to': tech_name}))
+def add_technician(name, mobile, username, password):
+    technician_collection.insert_one({
+        "name": name,
+        "mobile": mobile,
+        "username": username,
+        "password": password
+    })
+
+def authenticate_technician(username, password):
+    return technician_collection.find_one({"username": username, "password": password})
+
+def get_technician_tickets(tech_id):
+    return list(ticket_collection.find({"assigned_to.id": tech_id}))
+
+def update_ticket_status(ticket_id, status):
+    ticket_collection.update_one(
+        {"_id": ObjectId(ticket_id)},
+        {"$set": {"status": status, "updated_at": datetime.utcnow()}}
+    )
