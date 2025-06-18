@@ -1,87 +1,103 @@
 import streamlit as st
-from db import (
-    create_ticket, get_all_tickets, get_ticket_by_user, assign_ticket, close_ticket,
-    get_all_technicians, get_tickets_by_technician, get_sla_breached_tickets,
-    add_user, add_technician, get_user
-)
-from bson import ObjectId
+from db import *
+from bson.objectid import ObjectId
+from datetime import datetime
 
-# ----- Auth & Role Selection -----
-role = st.sidebar.selectbox("Login As", ["Resident", "Manager", "Technician"])
-username = st.sidebar.text_input("Username")
+st.set_page_config(page_title="Society Issue Tracker", layout="wide")
 
-# For demo: show flat number/mobile entry only if resident
-if role == "Resident" and st.sidebar.button("Register/Login"):
-    flat_no = st.sidebar.text_input("Flat Number")
-    mobile = st.sidebar.text_input("Mobile Number")
-    add_user(username, flat_no, mobile)
-    st.success("Logged in as Resident")
+st.title("🏘️ Society Issue Tracker")
 
-if role == "Technician" and st.sidebar.button("Register/Login"):
-    name = st.sidebar.text_input("Name")
-    mobile = st.sidebar.text_input("Mobile Number")
-    add_technician(username, name, mobile)
-    st.success("Logged in as Technician")
+role = st.sidebar.selectbox("Login As", ["Resident", "Technician", "Manager"])
 
-# ----- Resident Dashboard -----
-if role == "Resident" and username:
-    st.header("Raise New Issue")
-    title = st.text_input("Issue Title")
-    description = st.text_area("Description")
-    issue_type = st.selectbox("Issue Type", ["Electric", "Plumbing", "Carpentry", "Other"])
-    priority = st.selectbox("Priority", ["P1", "P2", "P3"])
+if role == "Resident":
+    st.header("Raise a New Ticket")
+    username = st.text_input("Your Name")
+    flat = st.text_input("Flat Number")
+    issue_type = st.selectbox("Issue Type", ["Electric", "Plumbing", "Carpentry", "Cleaning", "Others"])
+    desc = st.text_area("Describe the Issue")
+    priority = st.selectbox("Priority", ["P1 (6 Hrs)", "P2 (48 Hrs)", "P3 (5-10 Days)"])
+    
     if st.button("Submit Ticket"):
-        user = get_user(username)
-        if user:
-            create_ticket(user['flat_no'], title, description, issue_type, priority, username)
-            st.success("Ticket submitted successfully")
+        ticket = {
+            'username': username,
+            'flat': flat,
+            'type': issue_type,
+            'description': desc,
+            'priority': priority.split()[0]  # P1, P2, P3
+        }
+        create_ticket(ticket)
+        st.success("✅ Ticket Submitted Successfully!")
 
-    st.subheader("My Tickets")
-    tickets = get_ticket_by_user(username)
-    for t in tickets:
-        st.markdown(f"**Title**: {t['title']}\n\n**Status**: {t['status']}\n\n**Assigned To**: {t.get('assigned_to', 'Not Assigned')}\n\n**Mobile**: {t.get('technician_mobile', 'N/A')}")
-        st.markdown("---")
-
-# ----- Manager Dashboard -----
-if role == "Manager" and username:
-    st.title("Manager Dashboard")
-
-    all_tickets = get_all_tickets()
-    buckets = {"Electric": [], "Plumbing": [], "Carpentry": [], "Other": []}
-    for t in all_tickets:
-        buckets[t['issue_type']].append(t)
-
-    for category, tickets in buckets.items():
-        st.subheader(f"{category} Issues")
-        st.markdown(f"Total: {len(tickets)} | Resolved: {sum(1 for t in tickets if t['status']=='Resolved')} | In-Progress: {sum(1 for t in tickets if t['status']=='In Progress')} | Open: {sum(1 for t in tickets if t['status']=='Open')}")
-        for t in tickets:
-            st.markdown(f"**Title**: {t['title']}\n\n**Status**: {t['status']}\n\n**Priority**: {t['priority']}\n\n**Assigned To**: {t.get('assigned_to', 'Not Assigned')}\n\n**Flat**: {t['flat_no']}")
-            if t['status'] == "Open":
-                techs = get_all_technicians()
-                selected = st.selectbox(f"Assign to Technician (Ticket: {t['_id']})", [tech['username'] for tech in techs], key=str(t['_id']))
-                if st.button(f"Assign", key=f"assign_{t['_id']}"):
-                    assign_ticket(t['_id'], selected)
-                    st.success("Assigned successfully")
-            if t['status'] != "Resolved" and st.button("Close Ticket", key=f"close_{t['_id']}"):
-                close_ticket(t['_id'])
-                st.success("Ticket Closed")
+    st.subheader("📄 Your Tickets")
+    if username:
+        for ticket in get_user_tickets(username):
+            st.markdown(f"**Type**: {ticket['type']} | **Priority**: {ticket['priority']} | **Status**: {ticket['status']}")
+            if ticket.get('assigned_to'):
+                st.markdown(f"**Assigned To**: {ticket['assigned_to']}")
+            if ticket.get('due_date'):
+                overdue = datetime.now() > ticket['due_date']
+                due_status = "🚨 SLA Breached!" if overdue else "⏳ Within SLA"
+                st.markdown(f"**SLA**: {ticket['due_date'].strftime('%Y-%m-%d %H:%M')} | {due_status}")
             st.markdown("---")
 
-    st.subheader("SLA Breached Tickets")
-    breached = get_sla_breached_tickets()
-    for t in breached:
-        st.error(f"⚠️ SLA Breached: {t['title']} (Flat {t['flat_no']})")
+elif role == "Technician":
+    st.header("Technician Login")
+    uname = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
+    if st.button("Login"):
+        tech = technician_login(uname, pwd)
+        if tech:
+            st.success(f"Welcome {tech['name']}!")
+            st.subheader("🛠️ Assigned Tickets")
+            for ticket in get_tickets_by_technician(tech['name']):
+                st.markdown(f"**Flat**: {ticket['flat']} | **Type**: {ticket['type']} | **Status**: {ticket['status']}")
+                if st.button(f"Mark Resolved: {ticket['_id']}", key=str(ticket['_id'])):
+                    resolve_ticket(ticket['_id'])
+                    st.experimental_rerun()
+                st.markdown("---")
+        else:
+            st.error("Invalid Credentials")
 
-# ----- Technician Dashboard -----
-if role == "Technician" and username:
-    st.title("My Assigned Tickets")
-    tickets = get_tickets_by_technician(username)
-    breached = get_sla_breached_tickets(username)
-    for t in tickets:
-        st.markdown(f"**Title**: {t['title']}\n\n**Status**: {t['status']}\n\n**Priority**: {t['priority']}\n\n**Flat**: {t['flat_no']}")
-        if t in breached:
-            st.error("⚠️ SLA Breached")
-        if t['status'] != "Resolved" and st.button("Mark as Resolved", key=str(t['_id'])):
-            close_ticket(t['_id'])
-            st.success("Resolved")
-        st.markdown("---")
+elif role == "Manager":
+    st.header("Manager Dashboard")
+
+    tab1, tab2, tab3 = st.tabs(["📊 Overview", "🧑 Add Technicians", "📝 Assign Tickets"])
+
+    with tab1:
+        st.subheader("Tickets by Category")
+        tickets = get_all_tickets()
+        if tickets:
+            buckets = {}
+            for t in tickets:
+                cat = t['type']
+                stat = t['status']
+                if cat not in buckets:
+                    buckets[cat] = {'Open': 0, 'In Progress': 0, 'Resolved': 0}
+                buckets[cat][stat] = buckets[cat].get(stat, 0) + 1
+            
+            for cat, stats in buckets.items():
+                st.markdown(f"### {cat}")
+                st.write(stats)
+
+    with tab2:
+        st.subheader("Add a New Technician")
+        name = st.text_input("Technician Name")
+        phone = st.text_input("Phone Number")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Add Technician"):
+            add_technician(name, phone, username, password)
+            st.success("Technician Added")
+
+    with tab3:
+        st.subheader("Assign Tickets")
+        for ticket in get_open_tickets():
+            st.markdown(f"**Flat**: {ticket['flat']} | **Issue**: {ticket['type']} | **Desc**: {ticket['description']}")
+            techs = get_technicians()
+            tech_names = [t['name'] for t in techs]
+            selected_tech = st.selectbox("Assign to Technician", tech_names, key=str(ticket['_id']))
+            selected_priority = st.selectbox("Set Priority", ["P1", "P2", "P3"], key=f"pri_{ticket['_id']}")
+            if st.button(f"Assign Ticket {ticket['_id']}", key=f"btn_{ticket['_id']}"):
+                assign_ticket(ticket['_id'], selected_tech, selected_priority)
+                st.success("Ticket Assigned")
+                st.experimental_rerun()
