@@ -1,51 +1,56 @@
-from config import tickets_collection, technicians_collection
+# db.py
+from pymongo import MongoClient
 from datetime import datetime
 from bson.objectid import ObjectId
 
-def create_ticket(flat, issue_type, description, priority):
+# --- MongoDB Setup ---
+client = MongoClient("mongodb://localhost:27017")  # Or use MongoDB Atlas URI
+db = client["society_issue_tracker"]
+
+tickets = db["tickets"]
+technicians = db["technicians"]
+
+# --- DB Functions ---
+def create_ticket(flat_no, issue_type, description):
     ticket = {
-        "flat": flat,
+        "flat_no": flat_no,
         "issue_type": issue_type,
         "description": description,
-        "priority": priority,
-        "status": "Open",
-        "created_at": datetime.utcnow(),
-        "assigned_to": None
+        "status": "Pending",
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "assigned_to": None,
+        "priority": None,
+        "raised_by": "resident"
     }
-    tickets_collection.insert_one(ticket)
+    tickets.insert_one(ticket)
 
 def get_all_tickets():
-    return list(tickets_collection.find())
+    return list(tickets.find())
 
 def get_open_tickets():
-    return list(tickets_collection.find({"status": "Open"}))
+    return list(tickets.find({"assigned_to": None}))
 
-def get_tickets_by_flat(flat):
-    return list(tickets_collection.find({"flat": flat}))
-
-def assign_ticket(ticket_id, technician_username):
-    tickets_collection.update_one(
+def assign_ticket(ticket_id, technician_username, priority):
+    tickets.update_one(
         {"_id": ObjectId(ticket_id)},
-        {
-            "$set": {
-                "assigned_to": technician_username,
-                "status": "In Progress",
-                "assigned_at": datetime.utcnow()
-            }
-        }
+        {"$set": {
+            "assigned_to": technician_username,
+            "priority": priority,
+            "status": "In Progress"
+        }}
     )
 
-def close_ticket(ticket_id):
-    tickets_collection.update_one(
+def update_ticket_status(ticket_id, new_status):
+    tickets.update_one(
         {"_id": ObjectId(ticket_id)},
-        {"$set": {"status": "Resolved"}}
+        {"$set": {"status": new_status}}
     )
-
-def get_tickets_by_technician(technician_username):
-    return list(tickets_collection.find({"assigned_to": technician_username}))
 
 def get_technicians():
-    return list(technicians_collection.find())
+    return list(technicians.find())
 
-def add_technician(username, mobile):
-    technicians_collection.insert_one({"username": username, "mobile": mobile})
+def get_tickets_by_resident(username):
+    return list(tickets.find({"raised_by": username}))
+
+def get_tickets_by_technician(username):
+    return list(tickets.find({"assigned_to": username}))
