@@ -64,7 +64,7 @@ elif choice == "Manager":
     st.subheader("Assign Tickets")
     open_tickets = [t for t in tickets if t.get("status") == "Open"]
     if open_tickets:
-        selected_ticket = st.selectbox("Select a ticket", open_tickets, format_func=lambda x: f"{x['_id']} - {x['issue_type']}")
+        selected_ticket = st.selectbox("Select a ticket", open_tickets, format_func=lambda x: f"{x['_id']} - {x.get('issue_type', 'Unknown')}")
         technicians = get_technicians()
         tech_map = {f"{tech['name']} ({tech['mobile']})": tech["username"] for tech in technicians}
         selected_tech = st.selectbox("Assign to Technician", list(tech_map.keys()))
