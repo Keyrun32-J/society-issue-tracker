@@ -1,4 +1,4 @@
-from config import tickets, technicians
+from config import tickets_collection, technicians_collection
 from datetime import datetime
 from bson.objectid import ObjectId
 
@@ -12,19 +12,19 @@ def create_ticket(flat, issue_type, description, priority):
         "created_at": datetime.utcnow(),
         "assigned_to": None
     }
-    tickets.insert_one(ticket)
+    tickets_collection.insert_one(ticket)
 
 def get_all_tickets():
-    return list(tickets.find())
+    return list(tickets_collection.find())
 
 def get_open_tickets():
-    return list(tickets.find({"status": "Open"}))
+    return list(tickets_collection.find({"status": "Open"}))
 
 def get_tickets_by_flat(flat):
-    return list(tickets.find({"flat": flat}))
+    return list(tickets_collection.find({"flat": flat}))
 
 def assign_ticket(ticket_id, technician_username):
-    tickets.update_one(
+    tickets_collection.update_one(
         {"_id": ObjectId(ticket_id)},
         {
             "$set": {
@@ -36,16 +36,16 @@ def assign_ticket(ticket_id, technician_username):
     )
 
 def close_ticket(ticket_id):
-    tickets.update_one(
+    tickets_collection.update_one(
         {"_id": ObjectId(ticket_id)},
         {"$set": {"status": "Resolved"}}
     )
 
 def get_tickets_by_technician(technician_username):
-    return list(tickets.find({"assigned_to": technician_username}))
+    return list(tickets_collection.find({"assigned_to": technician_username}))
 
 def get_technicians():
-    return list(technicians.find())
+    return list(technicians_collection.find())
 
 def add_technician(username, mobile):
-    technicians.insert_one({"username": username, "mobile": mobile})
+    technicians_collection.insert_one({"username": username, "mobile": mobile})

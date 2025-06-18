@@ -1,12 +1,11 @@
-# config.py
 from pymongo import MongoClient
 
-# Hardcoded MongoDB URI for now (you can store in .env in production)
+# Update with your actual MongoDB connection string
 MONGO_URI = "mongodb+srv://society_user:Bank%401980@cluster0.sy8c2a5.mongodb.net/?retryWrites=true&w=majority"
 
 client = MongoClient(MONGO_URI)
-db = client["society"]
+db = client["society_issue_tracker"]
 
-ticket_collection = db["tickets"]
-technician_collection = db["technicians"]
-user_collection = db["users"]
+# Export collections
+tickets_collection = db["tickets"]
+technicians_collection = db["technicians"]
